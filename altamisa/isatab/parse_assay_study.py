@@ -28,7 +28,9 @@ class _NodeBuilderBase:
     #: Allowed ``column_type``s.
     allowed_column_types = None
 
-    def __init__(self, column_headers: List[ColumnHeader], study_id: str, assay_id: str):
+    def __init__(
+        self, column_headers: List[ColumnHeader], filename: str, study_id: str, assay_id: str
+    ):
         #: The column descriptions to build ``Material`` from.
         self.column_headers = column_headers
         #: The "Protocol REF" header, if any
@@ -67,6 +69,8 @@ class _NodeBuilderBase:
         #: Study and assay ids used for unique node naming
         self.study_id = study_id
         self.assay_id = assay_id
+        #: Original file name
+        self.filename = filename
 
     def _next_counter(self):
         """Increment counter value and return"""
@@ -459,8 +463,8 @@ class _ProcessBuilder(_NodeBuilderBase):
                 )
                 unique_name = models.AnnotatedStr(name_val, was_empty=True)
         if not protocol_ref:
-            tpl = "Missing protocol reference in column {}"
-            msg = tpl.format(self.protocol_ref_header.col_no + 1)
+            tpl = "Missing protocol reference in column {} of file {} "
+            msg = tpl.format(self.protocol_ref_header.col_no + 1, self.filename)
             raise ParseIsatabException(msg)
         return protocol_ref, unique_name, name, name_type
 
@@ -471,8 +475,11 @@ class _RowBuilderBase:
     #: Registry of column header to node builder
     node_builders = None
 
-    def __init__(self, header: List[ColumnHeader], study_id: str, assay_id: str = None):
+    def __init__(
+        self, header: List[ColumnHeader], filename: str, study_id: str, assay_id: str = None
+    ):
         self.header = header
+        self.filename = filename
         self.study_id = study_id
         self.assay_id = assay_id
         self._builders = list(self._make_builders())
@@ -482,7 +489,7 @@ class _RowBuilderBase:
         breaks = list(self._make_breaks())
         for start, end in zip(breaks, breaks[1:]):
             klass = self.node_builders[self.header[start].column_type]
-            yield klass(self.header[start:end], self.study_id, self.assay_id)
+            yield klass(self.header[start:end], self.filename, self.study_id, self.assay_id)
 
     def _make_breaks(self):
         """Build indices to break the columns at
@@ -717,7 +724,7 @@ class StudyRowReader:
         return prev_line
 
     def read(self):
-        builder = _StudyRowBuilder(self.header, self.study_id)
+        builder = _StudyRowBuilder(self.header, self.input_file.name, self.study_id)
         while True:
             line = self._read_next_line()
             if line:
@@ -811,7 +818,7 @@ class AssayRowReader:
         return prev_line
 
     def read(self):
-        builder = _AssayRowBuilder(self.header, self.study_id, self.assay_id)
+        builder = _AssayRowBuilder(self.header, self.input_file.name, self.study_id, self.assay_id)
         while True:
             line = self._read_next_line()
             if line:
